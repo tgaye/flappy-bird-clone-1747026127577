@@ -1,0 +1,367 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flappy Bird Clone</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        #game-container {
+            text-align: center;
+        }
+        canvas {
+            display: block;
+            margin: 0 auto;
+            border: 2px solid #333;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 18px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .instructions {
+            margin: 20px;
+            max-width: 400px;
+        }
+        .settings {
+            margin: 10px;
+        }
+        select, input {
+            padding: 5px;
+            margin: 5px;
+        }
+    </style>
+
+<base target="_self">
+
+
+    </head><body><div id="game-container">
+        <h1>Flappy Bird Clone</h1>
+        <div id="sketch-holder"></div>
+        <div class="settings">
+            <label for="birdColor">Bird Color:</label>
+            <input type="color" id="birdColor" value="#FF5733">
+            
+            <label for="bgStyle">Background:</label>
+            <select id="bgStyle">
+                <option value="day">Day</option>
+                <option value="night">Night</option>
+                <option value="space">Space</option>
+            </select>
+            
+            <label for="difficulty">Difficulty:</label>
+            <select id="difficulty">
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+            </select>
+        </div>
+        <div class="instructions">
+            <p>Click or press SPACE to make the bird flap. Avoid the pipes!</p>
+        </div>
+        <button id="startButton">Start Game</button>
+    </div>
+
+    <script>
+        let sketch = function(p) {
+            // Game variables
+            let bird;
+            let pipes = [];
+            let gravity;
+            let gameStarted = false;
+            let gameOver = false;
+            let score = 0;
+            let highScore = 0;
+            let pipeSpeed = 2;
+            let pipeFrequency = 100;
+            let gapSize = 150;
+            let bgColor;
+            let birdColor = "#FF5733";
+            let bgStyle = "day";
+            let difficulty = "medium";
+            
+            // Audio context for sound effects
+            let audioContext;
+            let gainNode;
+            
+            p.setup = function() {
+                let canvas = p.createCanvas(400, 600);
+                canvas.parent('sketch-holder');
+                
+                // Initialize game elements
+                resetGame();
+                
+                // Setup UI event listeners
+                document.getElementById('startButton').addEventListener('click', startGame);
+                document.getElementById('birdColor').addEventListener('input', function(e) {
+                    birdColor = e.target.value;
+                });
+                document.getElementById('bgStyle').addEventListener('change', function(e) {
+                    bgStyle = e.target.value;
+                    setBackground();
+                });
+                document.getElementById('difficulty').addEventListener('change', function(e) {
+                    difficulty = e.target.value;
+                    setDifficulty();
+                });
+                
+                // Initialize audio context on first user interaction
+                document.addEventListener('click', initializeAudio, { once: true });
+            };
+            
+            function initializeAudio() {
+                try {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    gainNode = audioContext.createGain();
+                    gainNode.gain.value = 0.2;
+                    gainNode.connect(audioContext.destination);
+                } catch (e) {
+                    console.log("Audio not supported");
+                }
+            }
+            
+            function playSound(frequency, duration) {
+                if (!audioContext) return;
+                
+                const oscillator = audioContext.createOscillator();
+                oscillator.type = 'sine';
+                oscillator.frequency.value = frequency;
+                oscillator.connect(gainNode);
+                oscillator.start();
+                oscillator.stop(audioContext.currentTime + duration);
+            }
+            
+            function setBackground() {
+                switch(bgStyle) {
+                    case "night":
+                        bgColor = p.color(20, 30, 50);
+                        break;
+                    case "space":
+                        bgColor = p.color(0, 0, 30);
+                        break;
+                    default: // day
+                        bgColor = p.color(135, 206, 235);
+                }
+            }
+            
+            function setDifficulty() {
+                switch(difficulty) {
+                    case "easy":
+                        pipeSpeed = 1.5;
+                        pipeFrequency = 120;
+                        gapSize = 180;
+                        break;
+                    case "hard":
+                        pipeSpeed = 3;
+                        pipeFrequency = 80;
+                        gapSize = 120;
+                        break;
+                    default: // medium
+                        pipeSpeed = 2;
+                        pipeFrequency = 100;
+                        gapSize = 150;
+                }
+            }
+            
+            function resetGame() {
+                bird = {
+                    x: 100,
+                    y: p.height / 2,
+                    radius: 20,
+                    velocity: 0,
+                    flapPower: -8
+                };
+                
+                pipes = [];
+                score = 0;
+                gameOver = false;
+                setBackground();
+                setDifficulty();
+            }
+            
+            function startGame() {
+                if (!gameStarted) {
+                    gameStarted = true;
+                    document.getElementById('startButton').textContent = "Restart Game";
+                } else {
+                    resetGame();
+                }
+            }
+            
+            p.draw = function() {
+                // Background
+                p.background(bgColor);
+                
+                if (bgStyle === "space") {
+                    // Draw stars
+                    p.fill(255);
+                    p.noStroke();
+                    for (let i = 0; i < 50; i++) {
+                        p.ellipse(p.random(p.width), p.random(p.height), p.random(1, 3));
+                    }
+                }
+                
+                if (!gameStarted) {
+                    // Start screen
+                    p.fill(255);
+                    p.textSize(32);
+                    p.textAlign(p.CENTER, p.CENTER);
+                    p.text("Flappy Bird", p.width/2, p.height/3);
+                    p.textSize(16);
+                    p.text("Click or press SPACE to start", p.width/2, p.height/2);
+                    return;
+                }
+                
+                // Update bird
+                if (!gameOver) {
+                    bird.velocity += 0.5; // Gravity
+                    bird.y += bird.velocity;
+                    
+                    // Check for collisions with ground or ceiling
+                    if (bird.y + bird.radius > p.height || bird.y - bird.radius < 0) {
+                        gameOver = true;
+                        playSound(220, 0.3);
+                    }
+                }
+                
+                // Draw bird
+                p.fill(birdColor);
+                p.ellipse(bird.x, bird.y, bird.radius * 2);
+                
+                // Eye
+                p.fill(255);
+                p.ellipse(bird.x + 8, bird.y - 5, 8);
+                p.fill(0);
+                p.ellipse(bird.x + 8, bird.y - 5, 4);
+                
+                // Beak
+                p.fill(255, 204, 0);
+                p.triangle(
+                    bird.x + bird.radius, bird.y,
+                    bird.x + bird.radius + 15, bird.y - 5,
+                    bird.x + bird.radius + 15, bird.y + 5
+                );
+                
+                // Generate pipes
+                if (p.frameCount % pipeFrequency === 0 && !gameOver) {
+                    let gapPosition = p.random(gapSize/2, p.height - gapSize/2);
+                    pipes.push({
+                        x: p.width,
+                        width: 60,
+                        gapPosition: gapPosition,
+                        gapSize: gapSize,
+                        passed: false
+                    });
+                }
+                
+                // Update and draw pipes
+                for (let i = pipes.length - 1; i >= 0; i--) {
+                    let pipe = pipes[i];
+                    
+                    if (!gameOver) {
+                        pipe.x -= pipeSpeed;
+                    }
+                    
+                    // Draw top pipe
+                    p.fill(50, 205, 50);
+                    p.rect(pipe.x, 0, pipe.width, pipe.gapPosition - pipe.gapSize/2);
+                    
+                    // Draw bottom pipe
+                    p.rect(pipe.x, pipe.gapPosition + pipe.gapSize/2, pipe.width, p.height);
+                    
+                    // Check for collisions
+                    if (!gameOver &&
+                        Math.abs(bird.x - (pipe.x + pipe.width/2)) < (bird.radius + pipe.width/2) &&
+                        (bird.y - bird.radius < pipe.gapPosition - pipe.gapSize/2 ||
+                        bird.y + bird.radius > pipe.gapPosition + pipe.gapSize/2)) {
+                        gameOver = true;
+                        playSound(220, 0.3);
+                    }
+                                        
+                    // Check if bird passed the pipe
+                    if (!pipe.passed && bird.x > pipe.x + pipe.width) {
+                        pipe.passed = true;
+                        score++;
+                        playSound(880, 0.1);
+                        if (score > highScore) {
+                            highScore = score;
+                        }
+                    }
+                    
+                    // Remove pipes that are off screen
+                    if (pipe.x + pipe.width < 0) {
+                        pipes.splice(i, 1);
+                    }
+                }
+                
+                // Display score
+                p.fill(255);
+                p.textSize(24);
+                p.textAlign(p.LEFT);
+                p.text("Score: " + score, 20, 30);
+                p.text("High: " + highScore, 20, 60);
+                
+                // Game over message
+                if (gameOver) {
+                    p.fill(255, 0, 0, 150);
+                    p.rect(0, 0, p.width, p.height);
+                    p.fill(255);
+                    p.textSize(32);
+                    p.textAlign(p.CENTER, p.CENTER);
+                    p.text("Game Over", p.width/2, p.height/2 - 30);
+                    p.textSize(16);
+                    p.text("Click to restart", p.width/2, p.height/2 + 20);
+                }
+            };
+            
+            p.mousePressed = function() {
+                if (!gameStarted) {
+                    startGame();
+                } else if (gameOver) {
+                    resetGame();
+                } else {
+                    bird.velocity = bird.flapPower;
+                    playSound(440, 0.1);
+                }
+            };
+            
+            p.keyPressed = function() {
+                if (p.key === ' ') {
+                    if (!gameStarted) {
+                        startGame();
+                    } else if (gameOver) {
+                        resetGame();
+                    } else {
+                        bird.velocity = bird.flapPower;
+                        playSound(440, 0.1);
+                    }
+                    return false; // Prevent default
+                }
+            };
+        };
+
+        new p5(sketch);
+    </script>
+
+              
+          
+                
+          
+              
+</body></html>
